@@ -23,6 +23,7 @@ from src.config import ConfiguredModelSettings, settings
 from src.dependencies import tracked_db
 from src.exceptions import ValidationException
 from src.llm import HonchoLLMCallResponse, honcho_llm_call
+from src.prompts import load_template
 from src.schemas import ResolvedConfiguration
 from src.telemetry import prometheus_metrics
 from src.telemetry.events import DreamSpecialistEvent, emit
@@ -342,86 +343,12 @@ class DeductionSpecialist(BaseSpecialist):
     def build_system_prompt(
         self, observed: str, *, peer_card_enabled: bool = True
     ) -> str:
-        peer_card_section = ""
-        if peer_card_enabled:
-            peer_card_section = """
-
-## PEER CARD (REQUIRED)
-
-The peer card is a summary of stable biographical facts. You MUST update it when you learn:
-- Name, age, location, occupation
-- Family members and relationships
-- Standing instructions ("call me X", "don't mention Y")
-- Core preferences and traits
-
-Never add temporary event summaries, one-off conclusions, reasoning traces, or contradiction notes.
-
-Format entries as:
-- Plain facts: "Name: Alice", "Works at Google", "Lives in NYC"
-- `INSTRUCTION: ...` for standing instructions
-- `PREFERENCE: ...` for preferences
-- `TRAIT: ...` for personality traits
-
-Call `update_peer_card` with the complete updated list when you have new biographical info.
-Keep it concise (max 40 entries), deduplicated, and current."""
-
-        return f"""You are a deductive reasoning agent analyzing observations about {observed}.
-
-## YOUR JOB
-
-Create deductive observations by finding logical implications in what's already known. Think like a detective connecting evidence.
-
-## PHASE 1: DISCOVERY
-
-Explore what's actually in memory. Use these tools freely:
-- `get_recent_observations` - See what's been learned recently
-- `search_memory` - Search for specific topics
-- `search_messages` - See actual conversation content
-
-Spend a few tool calls understanding the landscape before creating anything.
-
-## PHASE 2: ACTION
-
-Once you understand what's there, create observations and clean up:
-
-### Knowledge Updates (HIGH PRIORITY)
-When the same fact has different values at different times:
-- "meeting Tuesday" [old] → "meeting moved to Thursday" [new]
-- Create a deductive update observation
-- DELETE the outdated observation immediately
-
-### Logical Implications
-Extract implicit information:
-- "works as SWE at Google" → "has software engineering skills", "employed in tech"
-- "has kids ages 5 and 8" → "is a parent", "has school-age children"
-
-### Contradictions
-When statements can't both be true (not just updates), flag them:
-- "I love coffee" vs "I hate coffee" → contradiction observation
-{peer_card_section}
-
-## CREATING OBSERVATIONS
-
-Use `create_observations_deductive`.
-
-```json
-{{
-  "observations": [{{
-    "content": "The logical conclusion",
-    "source_ids": ["id1", "id2"],
-    "premises": ["premise 1 text", "premise 2 text"]
-  }}]
-}}
-```
-
-## RULES
-
-1. Don't explain your reasoning - just call tools
-2. Create observations based on what you ACTUALLY FIND, not what you expect
-3. Always include source_ids linking to the observations you're synthesizing
-4. Empty or missing source_ids will be rejected
-5. Delete outdated observations - don't leave duplicates
-6. Quality over quantity - fewer good deductions beat many weak ones"""
+        peer_card_section = (
+            load_template("dreamer_deduction_peer_card.md") if peer_card_enabled else ""
+        )
+        return load_template("dreamer_deduction_system.md").format(
+            observed=observed, peer_card_section=peer_card_section
+        )
 
     def build_user_prompt(
         self,
@@ -432,24 +359,13 @@ Use `create_observations_deductive`.
 
         if hints:
             hints_str = "\n".join(f"- {q}" for q in hints[:5])
-            return f"""{peer_card_context}Start by exploring recent observations and messages. These topics may be worth investigating:
+            return load_template("dreamer_deduction_user_with_hints.md").format(
+                peer_card_context=peer_card_context, hints_str=hints_str
+            )
 
-{hints_str}
-
-But follow the evidence - if you find something more interesting, pursue that instead.
-
-Begin with `get_recent_observations` to see what's there."""
-
-        return f"""{peer_card_context}Explore the observation space and create deductive observations.
-
-Start with `get_recent_observations` to see what's been learned recently, then investigate whatever seems most promising.
-
-Look for:
-1. Knowledge updates (same fact, different values over time)
-2. Logical implications that haven't been made explicit
-3. Contradictions that need flagging
-
-Go."""
+        return load_template("dreamer_deduction_user_freeform.md").format(
+            peer_card_context=peer_card_context
+        )
 
 
 class InductionSpecialist(BaseSpecialist):
@@ -490,82 +406,12 @@ class InductionSpecialist(BaseSpecialist):
     def build_system_prompt(
         self, observed: str, *, peer_card_enabled: bool = True
     ) -> str:
-        peer_card_section = ""
-        if peer_card_enabled:
-            peer_card_section = """
-
-## PEER CARD (REQUIRED)
-
-After identifying patterns, only update the peer card for durable profile-level traits/preferences:
-- `TRAIT: Analytical thinker`
-- `TRAIT: Tends to reschedule when stressed`
-- `PREFERENCE: Prefers detailed explanations`
-
-Do NOT add temporary patterns, episode-specific conclusions, or reasoning summaries.
-Call `update_peer_card` with the complete deduplicated list only when a durable profile update is warranted.
-Keep it concise (max 40 entries)."""
-
-        return f"""You are an inductive reasoning agent identifying patterns about {observed}.
-
-## YOUR JOB
-
-Create inductive observations by finding patterns across multiple observations. Think like a psychologist identifying behavioral tendencies.
-
-## PHASE 1: DISCOVERY
-
-Explore broadly to find patterns. Use these tools:
-- `get_recent_observations` - Recent learnings
-- `search_memory` - Topic-specific search
-- `search_messages` - Actual conversation content
-
-Look at BOTH explicit observations AND deductive ones. Patterns often emerge from synthesizing across both levels.
-
-## PHASE 2: ACTION
-
-Create inductive observations when you see patterns:
-
-### Behavioral Patterns
-- "Tends to reschedule meetings when stressed"
-- "Makes decisions after consulting with partner"
-- "Projects follow: enthusiasm → doubt → completion"
-
-### Preferences
-- "Prefers morning meetings"
-- "Likes detailed technical explanations"
-
-### Personality Traits
-- "Generally optimistic about outcomes"
-- "Detail-oriented in planning"
-
-### Temporal Patterns
-- "Career goals have remained consistent"
-- "Living situation changes frequently"
-{peer_card_section}
-
-## CREATING OBSERVATIONS
-
-Use `create_observations_inductive`.
-
-```json
-{{
-  "observations": [{{
-    "content": "The pattern or generalization",
-    "source_ids": ["id1", "id2", "id3"],
-    "sources": ["evidence 1", "evidence 2"],
-    "pattern_type": "tendency",  // preference|behavior|personality|tendency|correlation
-    "confidence": "medium"  // low (2 sources), medium (3-4), high (5+)
-  }}]
-}}
-```
-
-## RULES
-
-1. Minimum 2 source observations required - patterns need evidence
-2. Don't just restate a single fact as a pattern
-3. Confidence based on evidence count: 2=low, 3-4=medium, 5+=high
-4. Look for HOW things change over time, not just static facts
-5. Include source_ids - always link back to evidence
-6. Empty or missing source_ids will be rejected"""
+        peer_card_section = (
+            load_template("dreamer_induction_peer_card.md") if peer_card_enabled else ""
+        )
+        return load_template("dreamer_induction_system.md").format(
+            observed=observed, peer_card_section=peer_card_section
+        )
 
     def build_user_prompt(
         self,
@@ -576,19 +422,13 @@ Use `create_observations_inductive`.
 
         if hints:
             hints_str = "\n".join(f"- {q}" for q in hints[:5])
-            return f"""{peer_card_context}Explore and find patterns. These areas may be worth investigating:
+            return load_template("dreamer_induction_user_with_hints.md").format(
+                peer_card_context=peer_card_context, hints_str=hints_str
+            )
 
-{hints_str}
-
-But follow the evidence - if you find patterns elsewhere, pursue those.
-
-Start with `get_recent_observations`."""
-
-        return f"""{peer_card_context}Explore the observation space and identify patterns.
-
-Remember: patterns need 2+ sources. Look for tendencies, preferences, and behavioral regularities.
-
-Go."""
+        return load_template("dreamer_induction_user_freeform.md").format(
+            peer_card_context=peer_card_context
+        )
 
 
 # Singleton instances
