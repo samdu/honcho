@@ -203,12 +203,18 @@ for i in "${!ARCHITECTURES[@]}"; do
     arch="${ARCHITECTURES[$i]}"
     job_name="${JOB_NAMES[$i]}"
     (
-        kubectl wait --for=condition=ready pod -l "job-name=${job_name}" \
+        # kubectl wait returns immediately if no resources match yet, so
+        # wait for the pod to exist before waiting for it to be ready, and
+        # give the completion wait enough headroom for a cold-cache build
+        # with a rewritten uv.lock (~10min on these arches).
+        kubectl wait --for=create pod -l "job-name=${job_name}" \
             -n "${NAMESPACE}" --timeout=120s >/dev/null 2>&1 || true
+        kubectl wait --for=condition=ready pod -l "job-name=${job_name}" \
+            -n "${NAMESPACE}" --timeout=300s >/dev/null 2>&1 || true
         kubectl logs -f "job/${job_name}" -n "${NAMESPACE}" 2>&1 \
             | sed "s/^/[${arch}] /" || true
         if kubectl wait --for=condition=complete "job/${job_name}" \
-                -n "${NAMESPACE}" --timeout=60s >/dev/null 2>&1; then
+                -n "${NAMESPACE}" --timeout=1200s >/dev/null 2>&1; then
             echo "[${arch}] build complete"
         else
             echo "[${arch}] build FAILED" >&2
