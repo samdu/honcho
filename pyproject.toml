@@ -9,6 +9,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi[standard]>=0.131.0",
+    "starlette>=1.0.1",  # CVE-2026-48710 (BadHost) floor; pulled transitively via fastapi
     "python-dotenv>=1.0.0",
     "sqlalchemy>=2.0.30",
     "fastapi-pagination>=0.14.2",
