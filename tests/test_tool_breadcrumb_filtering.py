@@ -9,7 +9,6 @@ from src.utils.message_filter import (
     is_tool_run_breadcrumb,
 )
 
-
 # ---------------------------------------------------------------------------
 # Unit tests for the predicate / filter helper (no DB required)
 # ---------------------------------------------------------------------------

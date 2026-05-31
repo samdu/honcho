@@ -58,7 +58,5 @@ def filter_tool_run_breadcrumbs(
     kept = [m for m in messages if not is_tool_run_breadcrumb(content_of(m))]
     dropped = len(messages) - len(kept)
     if dropped:
-        logger.debug(
-            "Filtered %d tool-run breadcrumb message(s) at ingestion", dropped
-        )
+        logger.debug("Filtered %d tool-run breadcrumb message(s) at ingestion", dropped)
     return kept
