@@ -189,8 +189,7 @@ class RepresentationManager:
 
         dropped = len(all_observations) - headroom
         logger.warning(
-            "Per-session observation cap reached for %s/%s (observer=%s, observed=%s): "
-            "%d existing, cap=%d — dropping %d of %d new observations from this burst",
+            "Per-session observation cap reached for %s/%s (observer=%s, observed=%s): %d existing, cap=%d — dropping %d of %d new observations from this burst",
             self.workspace_name,
             session_name,
             self.observer,

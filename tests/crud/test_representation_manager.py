@@ -360,13 +360,17 @@ class TestRepresentationManagerSessionCap:
         )
 
     @pytest.mark.asyncio
-    async def test_cap_truncates_burst_to_headroom(self, monkeypatch):
+    async def test_cap_truncates_burst_to_headroom(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """A batch overflowing the cap is trimmed to the remaining headroom."""
         monkeypatch.setattr(settings.DERIVER, "MAX_OBSERVATIONS_PER_SESSION", 50)
         manager = RepresentationManager(
             "workspace", observer="observer", observed="observed"
         )
-        observations = [self._explicit(f"obs {i}") for i in range(5)]
+        observations: list[ExplicitObservation | DeductiveObservation] = [
+            self._explicit(f"obs {i}") for i in range(5)
+        ]
 
         with (
             patch("src.crud.representation.tracked_db", _fake_tracked_db),
@@ -380,16 +384,23 @@ class TestRepresentationManagerSessionCap:
             )
 
         # headroom = 50 - 48 = 2
-        assert [o.content for o in result] == ["obs 0", "obs 1"]  # pyright: ignore[reportAttributeAccessIssue]
+        assert [o.content for o in result if isinstance(o, ExplicitObservation)] == [
+            "obs 0",
+            "obs 1",
+        ]
 
     @pytest.mark.asyncio
-    async def test_cap_drops_entire_batch_when_session_full(self, monkeypatch):
+    async def test_cap_drops_entire_batch_when_session_full(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """When the session is already at/over the cap, the whole batch is dropped."""
         monkeypatch.setattr(settings.DERIVER, "MAX_OBSERVATIONS_PER_SESSION", 50)
         manager = RepresentationManager(
             "workspace", observer="observer", observed="observed"
         )
-        observations = [self._explicit(f"obs {i}") for i in range(3)]
+        observations: list[ExplicitObservation | DeductiveObservation] = [
+            self._explicit(f"obs {i}") for i in range(3)
+        ]
 
         with (
             patch("src.crud.representation.tracked_db", _fake_tracked_db),
@@ -405,13 +416,17 @@ class TestRepresentationManagerSessionCap:
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_cap_disabled_skips_count_query(self, monkeypatch):
+    async def test_cap_disabled_skips_count_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """A cap of 0 disables the limit and avoids the count query entirely."""
         monkeypatch.setattr(settings.DERIVER, "MAX_OBSERVATIONS_PER_SESSION", 0)
         manager = RepresentationManager(
             "workspace", observer="observer", observed="observed"
         )
-        observations = [self._explicit(f"obs {i}") for i in range(5)]
+        observations: list[ExplicitObservation | DeductiveObservation] = [
+            self._explicit(f"obs {i}") for i in range(5)
+        ]
         count_mock = AsyncMock(return_value=999)
 
         with patch(
@@ -427,7 +442,7 @@ class TestRepresentationManagerSessionCap:
 
     @pytest.mark.asyncio
     async def test_save_representation_embeds_only_uncapped_observations(
-        self, monkeypatch
+        self, monkeypatch: pytest.MonkeyPatch
     ):
         """save_representation embeds and saves only the observations that fit the cap."""
         monkeypatch.setattr(settings.DERIVER, "MAX_OBSERVATIONS_PER_SESSION", 50)
@@ -470,7 +485,9 @@ class TestRepresentationManagerSessionCap:
         assert saved_observations[0].content == "a"
 
     @pytest.mark.asyncio
-    async def test_save_representation_skips_when_session_full(self, monkeypatch):
+    async def test_save_representation_skips_when_session_full(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
         """save_representation returns early without embedding when the session is full."""
         monkeypatch.setattr(settings.DERIVER, "MAX_OBSERVATIONS_PER_SESSION", 50)
         manager = RepresentationManager(
