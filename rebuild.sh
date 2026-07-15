@@ -66,7 +66,12 @@ echo "==> Building ${IMAGE} (${SOURCE_SHA}) on ${ARCHITECTURES[*]}"
 # SHA short-circuit: if the existing image was built from this exact HEAD,
 # skip unless --force.
 if [[ "${FORCE}" != "true" && "${SOURCE_SHA}" != "unknown" ]]; then
-    existing_sha=$(crane config --insecure "${REGISTRY}/${IMAGE}:${TAG}-${ARCHITECTURES[0]}" 2>/dev/null \
+    # Ask the index (:TAG) — what deployments pull — not a per-arch tag. The
+    # per-arch images are pushed BEFORE :TAG is assembled, so a run that dies in
+    # between leaves :TAG-amd64 new while :TAG still serves the old image; asking
+    # the arch tag then reports "already built" and skips, stranding the stale
+    # index with no way out short of --force.
+    existing_sha=$(crane config --insecure "${REGISTRY}/${IMAGE}:${TAG}" 2>/dev/null \
         | jq -r '.config.Labels["org.opencontainers.image.revision"] // ""' 2>/dev/null \
         || true)
     if [[ "${existing_sha}" == "${SOURCE_SHA}" ]]; then
