@@ -501,7 +501,7 @@ async def enqueue_dream(
             is_in_progress = await db_session.scalar(in_progress_check)
 
             if is_in_progress:
-                logger.info(
+                logger.debug(
                     "Skipping dream enqueue - already in progress: %s/%s/%s (type: %s)",
                     workspace_name,
                     observer,
@@ -521,7 +521,7 @@ async def enqueue_dream(
             is_pending = await db_session.scalar(pending_check)
 
             if is_pending:
-                logger.info(
+                logger.debug(
                     "Dream already pending in queue: %s/%s/%s (type: %s)",
                     workspace_name,
                     observer,
