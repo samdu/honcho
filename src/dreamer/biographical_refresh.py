@@ -231,7 +231,6 @@ async def run_biographical_refresh(
             model_config=settings.DREAM.DEDUCTION_MODEL_CONFIG,
             prompt=prompt,
             max_tokens=cfg.MAX_OUTPUT_TOKENS,
-            track_name="Biographical Refresh",
             response_model=_Reconciliation,
             json_mode=True,
             enable_retry=True,
@@ -244,6 +243,7 @@ async def run_biographical_refresh(
                 run_id=parent_run_id,
                 observer=observer,
                 observed=observed,
+                track_name="Biographical Refresh",
             ),
         )
     except Exception:

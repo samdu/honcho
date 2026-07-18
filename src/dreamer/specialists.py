@@ -169,6 +169,10 @@ If you update it, send the full deduplicated list and remove stale entries.
             SpecialistResult with metrics and content
         """
         run_id = parent_run_id or generate_nanoid()
+        # Specialists sharing the orchestrator's run_id (one dream trace) each get a
+        # distinct span_id so their CloudEvents trace resource ids don't collide;
+        # trace_id stays run_id so Langfuse still groups them (keyed by agent_type).
+        span_id = generate_nanoid() if parent_run_id is not None else run_id
         task_name = f"dreamer_{self.name}_{run_id}"
         start_time = time.perf_counter()
 
@@ -286,15 +290,20 @@ If you update it, send the full deduplicated list and remove stale entries.
                 tool_executor=tool_executor,
                 max_tool_iterations=self.get_max_iterations(),
                 messages=messages,
-                track_name=f"Dreamer/{self.name}",
                 telemetry=LLMTelemetryContext(
                     workspace_name=workspace_name,
                     call_purpose=call_purpose_slug,
                     parent_category="dream",
                     agent_type=self.name,
                     run_id=run_id,
+                    # Root span per specialist run (distinct span_id, see above).
+                    # parent_span_id stays None for now; wiring specialists as
+                    # children of a dream-level trace is forking (out of scope).
+                    trace_id=run_id,
+                    span_id=span_id,
                     observer=observer,
                     observed=observed,
+                    track_name=f"Dreamer/{self.name}",
                 ),
             )
 
@@ -597,7 +606,8 @@ Use `create_observations_deductive`.
 7. The observation `content` is the distilled fact alone — never the inference chain that produced it. Write "Daphne is Krista's dog", not "Daphne is almost certainly a pet (likely a cat), reasoning from 'got on the keyboard'". The premises field carries the support; the content does not
 8. Deduce enduring facts, not episodes. A one-off event (a layoff's mechanics, an incident, a negotiation's timing) belongs in explicit observations; only promote it to a deduction when it reflects a durable property of the observee
 9. Use durable terms, not volatile specifics. Don't bake churning details (hostnames, versions, exact counts, today's status) into a deduction meant to endure — name the stable category instead
-10. Don't hedge a confirmed fact ("Pax", not "likely Pax") and never add a specific the sources don't contain"""
+10. Don't hedge a confirmed fact ("Pax", not "likely Pax") and never add a specific the sources don't contain
+11. When you are finished, do not output a summary of what you did - output only the token DONE"""
 
     def build_user_prompt(
         self,
@@ -733,7 +743,8 @@ Use `create_observations_inductive`.
 8. Don't re-mint an existing pattern. Before creating, search for an inductive observation already expressing this tendency; if one exists, leave it and move on — you cannot delete, so a near-duplicate on a new day is permanent clutter. Consolidate, don't accrete
 9. The `content` is the distilled pattern alone — not the evidence narration or the reasoning that found it. The sources/source_ids fields carry the support
 10. State patterns in durable terms; keep volatile specifics (current hostnames, versions, exact counts, today's status) out of a generalization meant to endure
-11. Ground every pattern and its confidence in the cited sources — don't inflate confidence or invent supporting instances"""
+11. Ground every pattern and its confidence in the cited sources — don't inflate confidence or invent supporting instances
+12. When you are finished, do not output a summary of what you did - output only the token DONE"""
 
     def build_user_prompt(
         self,
