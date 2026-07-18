@@ -1,11 +1,12 @@
 import logging
 from collections.abc import AsyncGenerator, Callable
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import jwt
 import pytest
 import pytest_asyncio
+import tiktoken
 from cashews.backends.interface import ControlMixin
 from cashews.picklers import PicklerType
 from fakeredis import FakeAsyncRedis
@@ -497,6 +498,19 @@ def mock_openai_embeddings(request: pytest.FixtureRequest):
             "src.embedding_client.embedding_client.prepare_chunks"
         ) as mock_prepare_chunks,
         patch("src.embedding_client.embedding_client.batch_embed") as mock_batch_embed,
+        # Patched on the class, not the `embedding_client` instance: a
+        # property must be patched on its owning class so `patch()` reads
+        # the descriptor itself as the "original" value, rather than
+        # invoking the real getter (which would construct a live API
+        # client and raise for lack of credentials).
+        patch(
+            "src.embedding_client.EmbeddingClient.encoding",
+            new_callable=PropertyMock,
+            # Real (local) tokenizer: no API key needed, and callers that
+            # count/diff tokens (e.g. dedup's is_rejected_duplicate) need
+            # real token boundaries, not a mock.
+            return_value=tiktoken.get_encoding("cl100k_base"),
+        ) as mock_encoding,
     ):
         # Mock the embed method to return content-dependent embedding
         def embed_side_effect(content: str) -> list[float]:
@@ -533,6 +547,7 @@ def mock_openai_embeddings(request: pytest.FixtureRequest):
             "simple_batch_embed": mock_simple_batch_embed,
             "prepare_chunks": mock_prepare_chunks,
             "batch_embed": mock_batch_embed,
+            "encoding": mock_encoding,
         }
 
 
